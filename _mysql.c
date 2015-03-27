@@ -554,6 +554,7 @@ _mysql_ConnectionObject_Initialize(
 #if HAVE_OPENSSL
 	char *key = NULL, *cert = NULL, *ca = NULL,
 		*capath = NULL, *cipher = NULL;
+	int verify_server = 0;
 #endif
 	char *host = NULL, *user = NULL, *passwd = NULL,
 		*db = NULL, *unix_socket = NULL;
@@ -625,6 +626,19 @@ _mysql_ConnectionObject_Initialize(
 		_stringsuck(cert, value, ssl);
 		_stringsuck(key, value, ssl);
 		_stringsuck(cipher, value, ssl);
+
+		if (PyMapping_HasKeyString(ssl, "verify_server_cert")) {
+			value = PyMapping_GetItemString(ssl, "verify_server_cert");
+		} else {
+			Py_INCREF(Py_False);
+			value = Py_False;
+		}
+		if (PyObject_IsTrue(value)) {
+			verify_server = 1;
+		} else {
+			verify_server = 0;
+		}
+		Py_DECREF(value);
 #else
 		PyErr_SetString(_mysql_NotSupportedError,
 				"client library does not have SSL support");
@@ -668,9 +682,12 @@ _mysql_ConnectionObject_Initialize(
 		mysql_options(&(self->connection), MYSQL_OPT_LOCAL_INFILE, (char *) &local_infile);
 
 #if HAVE_OPENSSL
-	if (ssl)
+	if (ssl) {
 		mysql_ssl_set(&(self->connection),
 			      key, cert, ca, capath, cipher);
+		my_bool flag = verify_server;
+		mysql_options(&(self->connection), MYSQL_OPT_SSL_VERIFY_SERVER_CERT, &flag);
+	}
 #endif
 
 	conn = mysql_real_connect(&(self->connection), host, user, passwd, db,
